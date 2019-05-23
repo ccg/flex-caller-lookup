@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Caller Lookup</title>
+    <link rel="stylesheet" href="css/bootstrap.css">
+</head>
+<body>
+<div class="container-fluid">
+    <h3>Chad's Caller Inspector</h3>
+    <p>&larr; Select a task for more caller information.</p>
+    <table class="table table-condensed table-striped">
+        <tbody>
+        <tr>
+            <th scope="row">Country Code</th>
+            <td id="dd-country-code"></td>
+        </tr>
+        <tr>
+            <th scope="row">Phone Number</th>
+            <td id="dd-phone-number"></td>
+        </tr>
+        <tr>
+            <th scope="row">National Format</th>
+            <td id="dd-national-format"></td>
+        </tr>
+        <tr>
+            <th scope="row">Carrier Name</th>
+            <td id="dd-carrier-name"></td>
+        </tr>
+        <tr>
+            <th scope="row">Carrier Type</th>
+            <td id="dd-carrier-type"></td>
+        </tr>
+        <tr>
+            <th scope="row">Spam Score</th>
+            <td id="dd-spam-score"></td>
+        </tr>
+        <tr>
+            <th scope="row">Spam Score Match</th>
+            <td id="dd-spam-score-match"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+<!--<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>-->
+<script src="js/bootstrap.bundle.js"></script>
+<script>
+    var accountSid = 'TWILIO_SID';
+    var password = 'TWILIO_PASSWORD';
+    var spamAddOnUniqueName = 'truecnam_truespam';
+
+    function buildBasicAuthHeader(username, password) {
+        var token = username + ':' + password;
+        var hash = btoa(token);
+        return 'Basic ' + hash;
+    }
+
+    function SafeGetter(initialValue) {
+        this.value = initialValue;
+    }
+
+    function isUndefined(value) {
+        return typeof value === 'undefined';
+    }
+
+    SafeGetter.prototype.get = function get(key) {
+        if (this.value === null || isUndefined(this.value)) {
+            console.log('Not found: ' + key);
+            return this;
+        }
+        return new SafeGetter(this.value[key]);
+    };
+
+    SafeGetter.prototype.getFinal = function done() {
+        return this.value;
+    };
+
+    function handleTwilioResponseText(text) {
+        var info = JSON.parse(text);
+        console.log(info);
+        document.getElementById('dd-country-code').innerText = info['country_code'];
+        document.getElementById('dd-phone-number').innerText = info['phone_number'];
+        document.getElementById('dd-national-format').innerText = info['national_format'];
+
+        var carrier = info.carrier;
+        document.getElementById('dd-carrier-name').innerText = carrier.name;
+        document.getElementById('dd-carrier-type').innerText = carrier.type;
+
+        var response = new SafeGetter(info);
+        var spamScores = response
+            .get('add_ons')
+            .get('results')
+            .get('truecnam_truespam')
+            .get('result');
+        var spamScore = spamScores.get('spam_score').getFinal();
+        var spamScoreMatch = spamScores.get('spam_score_match').getFinal();
+        document.getElementById('dd-spam-score').innerText = spamScore;
+        document.getElementById('dd-spam-score-match').innerText = spamScoreMatch;
+    }
+
+    function onReady() {
+        // URLSearchParams not supported on IE11. Edge should be OK.
+        var urlSearchParams = new URLSearchParams(window.location.search);
+        var name = urlSearchParams.get('name');
+        console.log('name: ' + name);
+
+        var authToken = buildBasicAuthHeader(accountSid, password);
+
+        var twilioUrl = 'https://lookups.twilio.com/v1/PhoneNumbers/' + name;
+        twilioUrl += '?Type=carrier';
+        twilioUrl += '&AddOns=' + spamAddOnUniqueName;
+        console.log('Twilio URL: ' + twilioUrl);
+
+        if (name && name.length > 0) {
+            console.log('start ajax');
+            var request = new XMLHttpRequest();
+            request.open('GET', twilioUrl);
+            request.withCredentials = false;
+            request.setRequestHeader('Authorization', authToken);
+            request.onreadystatechange = function () {
+                console.log('ajax state change');
+                if (request.readyState !== 4 || request.status !== 200) {
+                    console.error(request);
+                    return;
+                }
+                handleTwilioResponseText(request.responseText);
+            };
+            request.send();
+        } else {
+            console.log("Ignoring empty `name`");
+        }
+    }
+
+    // No IE8 support here.
+    document.addEventListener('DOMContentLoaded', onReady);
+</script>
+</body>
+</html>
